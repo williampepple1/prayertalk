@@ -1,0 +1,3 @@
+@echo off
+echo Starting Prayer Talk on Web (Chrome)...
+flutter run -d chrome

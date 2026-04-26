@@ -15,17 +15,11 @@ class TtsService {
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
 
-    _flutterTts.setStartHandler(() {
-      print('TTS Started');
-    });
+    _flutterTts.setStartHandler(() {});
 
-    _flutterTts.setCompletionHandler(() {
-      print('TTS Completed');
-    });
+    _flutterTts.setCompletionHandler(() {});
 
-    _flutterTts.setErrorHandler((msg) {
-      print('TTS Error: $msg');
-    });
+    _flutterTts.setErrorHandler((msg) {});
 
     _isInitialized = true;
   }

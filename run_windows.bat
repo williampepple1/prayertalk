@@ -1,0 +1,3 @@
+@echo off
+echo Starting Prayer Talk on Windows...
+flutter run -d windows
