@@ -11,7 +11,7 @@ class TtsService {
     if (_isInitialized) return;
 
     await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setSpeechRate(0.35);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
 
@@ -92,20 +92,7 @@ class TtsService {
       final line = prayer.lines[i];
       onLineStart(i, line);
 
-      String prefix = '';
-      switch (line.type) {
-        case PrayerLineType.leader:
-          prefix = 'Leader: ';
-          break;
-        case PrayerLineType.response:
-          prefix = 'Response: ';
-          break;
-        case PrayerLineType.both:
-          prefix = 'All: ';
-          break;
-      }
-
-      await _flutterTts.speak('$prefix${line.text}');
+      await _flutterTts.speak(line.text);
 
       await Future.delayed(Duration(seconds: 1));
 

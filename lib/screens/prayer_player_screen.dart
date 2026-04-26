@@ -19,14 +19,43 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
   bool _isPlaying = false;
   bool _isPaused = false;
   int _currentLineIndex = -1;
-  double _speechRate = 0.5;
+  double _speechRate = 0.35;
   double _volume = 1.0;
   bool _showSettings = false;
+  List<dynamic> _voices = [];
+  Map<String, String>? _selectedVoice;
+  bool _isLoadingVoices = false;
 
   @override
   void initState() {
     super.initState();
     _ttsService.initialize();
+    _loadVoices();
+  }
+
+  Future<void> _loadVoices() async {
+    setState(() {
+      _isLoadingVoices = true;
+    });
+    
+    try {
+      final voices = await _ttsService.getVoices();
+      setState(() {
+        _voices = voices;
+        _isLoadingVoices = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingVoices = false;
+      });
+    }
+  }
+
+  Future<void> _changeVoice(Map<String, String> voice) async {
+    setState(() {
+      _selectedVoice = voice;
+    });
+    await _ttsService.setVoice(voice);
   }
 
   @override
@@ -202,20 +231,20 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                     children: [
                       const Icon(Icons.speed, size: 20),
                       const SizedBox(width: 8),
-                      const Text('Speech Rate:'),
+                      const Text('Speed:'),
                       Expanded(
                         child: Slider(
                           value: _speechRate,
                           min: 0.1,
                           max: 1.0,
-                          divisions: 9,
-                          label: _speechRate.toStringAsFixed(1),
+                          divisions: 18,
+                          label: _speechRate.toStringAsFixed(2),
                           onChanged: _isPlaying && !_isPaused
                               ? null
                               : _updateSpeechRate,
                         ),
                       ),
-                      Text(_speechRate.toStringAsFixed(1)),
+                      Text(_speechRate.toStringAsFixed(2)),
                     ],
                   ),
                   Row(
@@ -236,6 +265,85 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                       Text('${(_volume * 100).toInt()}%'),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Icon(Icons.record_voice_over, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('Voice:'),
+                      const SizedBox(width: 8),
+                      if (_isLoadingVoices)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else if (_voices.isEmpty)
+                        const Text(
+                          'No voices available',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                    ],
+                  ),
+                  if (_voices.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 150),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _voices.length,
+                        itemBuilder: (context, index) {
+                          final voice = _voices[index] as Map<dynamic, dynamic>;
+                          final voiceName = voice['name']?.toString() ?? 'Voice ${index + 1}';
+                          final locale = voice['locale']?.toString() ?? '';
+                          final voiceMap = {
+                            'name': voiceName,
+                            'locale': locale,
+                          };
+                          final isSelected = _selectedVoice != null &&
+                              _selectedVoice!['name'] == voiceName;
+
+                          return ListTile(
+                            dense: true,
+                            selected: isSelected,
+                            selectedTileColor: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withValues(alpha: 0.3),
+                            leading: Icon(
+                              isSelected ? Icons.check_circle : Icons.mic,
+                              size: 20,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey,
+                            ),
+                            title: Text(
+                              voiceName,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: locale.isNotEmpty
+                                ? Text(
+                                    locale,
+                                    style: const TextStyle(fontSize: 11),
+                                  )
+                                : null,
+                            onTap: _isPlaying && !_isPaused
+                                ? null
+                                : () => _changeVoice(voiceMap),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
