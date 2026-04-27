@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/prayer.dart';
-import '../services/tts_service.dart';
+import '../services/prayer_playback_service.dart';
+import '../utils/voice_formatter.dart';
 
 class PrayerPlayerScreen extends StatefulWidget {
   final Prayer prayer;
@@ -15,10 +16,7 @@ class PrayerPlayerScreen extends StatefulWidget {
 }
 
 class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
-  final TtsService _ttsService = TtsService();
-  bool _isPlaying = false;
-  bool _isPaused = false;
-  int _currentLineIndex = -1;
+  final _playbackService = PrayerPlaybackService();
   double _speechRate = 0.35;
   double _volume = 1.0;
   bool _showSettings = false;
@@ -29,8 +27,29 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _ttsService.initialize();
+    _playbackService.initialize();
+    _loadSavedSettings();
     _loadVoices();
+    _playbackService.addListener(_onPlaybackChanged);
+  }
+
+  void _onPlaybackChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadSavedSettings() async {
+    // Load saved settings
+    final savedSpeechRate = await _playbackService.ttsService.getSavedSpeechRate();
+    final savedVolume = await _playbackService.ttsService.getSavedVolume();
+    final savedVoice = await _playbackService.ttsService.getSavedVoice();
+
+    setState(() {
+      _speechRate = savedSpeechRate;
+      _volume = savedVolume;
+      _selectedVoice = savedVoice;
+    });
   }
 
   Future<void> _loadVoices() async {
@@ -39,9 +58,12 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
     });
     
     try {
-      final voices = await _ttsService.getVoices();
+      final voices = await _playbackService.ttsService.getVoices();
+      final savedVoice = await _playbackService.ttsService.getSavedVoice();
+      
       setState(() {
         _voices = voices;
+        _selectedVoice = savedVoice;
         _isLoadingVoices = false;
       });
     } catch (e) {
@@ -55,109 +77,43 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
     setState(() {
       _selectedVoice = voice;
     });
-    await _ttsService.setVoice(voice);
+    await _playbackService.ttsService.setVoice(voice);
   }
 
   @override
   void dispose() {
-    _ttsService.dispose();
+    _playbackService.removeListener(_onPlaybackChanged);
     super.dispose();
   }
 
   void _playPrayer() {
-    if (_isPlaying && !_isPaused) return;
-
-    setState(() {
-      _isPlaying = true;
-      _isPaused = false;
-      if (_currentLineIndex == -1) {
-        _currentLineIndex = 0;
-      }
-    });
-
-    _ttsService.playPrayerWithCallAndResponse(
-      prayer: widget.prayer,
-      onLineStart: (index, line) {
-        if (mounted) {
-          setState(() {
-            _currentLineIndex = index;
-          });
-        }
-      },
-      onComplete: () {
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-            _isPaused = false;
-            _currentLineIndex = -1;
-          });
-          _showCompletionDialog();
-        }
-      },
-      shouldContinue: () => _isPlaying && mounted,
-    );
+    _playbackService.playPrayer(widget.prayer);
   }
 
   void _pausePrayer() {
-    setState(() {
-      _isPaused = true;
-    });
-    _ttsService.pause();
+    _playbackService.pause();
   }
 
   void _resumePrayer() {
-    setState(() {
-      _isPaused = false;
-    });
-    _ttsService.resume();
+    _playbackService.resume();
   }
 
   void _stopPrayer() {
-    setState(() {
-      _isPlaying = false;
-      _isPaused = false;
-      _currentLineIndex = -1;
-    });
-    _ttsService.stop();
+    _playbackService.stop();
   }
 
   void _updateSpeechRate(double rate) {
     setState(() {
       _speechRate = rate;
     });
-    _ttsService.setSpeechRate(rate);
+    _playbackService.ttsService.setSpeechRate(rate);
   }
 
   void _updateVolume(double volume) {
     setState(() {
       _volume = volume;
     });
-    _ttsService.setVolume(volume);
-  }
-
-  void _showCompletionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Prayer Complete'),
-        content: const Text('You have finished this prayer. May God bless you!'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _playPrayer();
-            },
-            child: const Text('Pray Again'),
-          ),
-        ],
-      ),
-    );
+    _playbackService.ttsService.setVolume(volume);
   }
 
   Color _getLineColor(PrayerLineType type) {
@@ -239,9 +195,7 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                           max: 1.0,
                           divisions: 18,
                           label: _speechRate.toStringAsFixed(2),
-                          onChanged: _isPlaying && !_isPaused
-                              ? null
-                              : _updateSpeechRate,
+                          onChanged: _updateSpeechRate,
                         ),
                       ),
                       Text(_speechRate.toStringAsFixed(2)),
@@ -307,6 +261,10 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                           final isSelected = _selectedVoice != null &&
                               _selectedVoice!['name'] == voiceName;
 
+                          // Format voice name and locale for display
+                          final displayName = VoiceFormatter.formatVoiceName(voiceName);
+                          final displayLocale = VoiceFormatter.formatLocale(locale);
+
                           return ListTile(
                             dense: true,
                             selected: isSelected,
@@ -322,7 +280,7 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                                   : Colors.grey,
                             ),
                             title: Text(
-                              voiceName,
+                              displayName,
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: isSelected
@@ -330,15 +288,13 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                                     : FontWeight.normal,
                               ),
                             ),
-                            subtitle: locale.isNotEmpty
+                            subtitle: displayLocale.isNotEmpty
                                 ? Text(
-                                    locale,
+                                    displayLocale,
                                     style: const TextStyle(fontSize: 11),
                                   )
                                 : null,
-                            onTap: _isPlaying && !_isPaused
-                                ? null
-                                : () => _changeVoice(voiceMap),
+                            onTap: () => _changeVoice(voiceMap),
                           );
                         },
                       ),
@@ -378,9 +334,10 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: widget.prayer.lines.length,
-              itemBuilder: (context, index) {
-                final line = widget.prayer.lines[index];
-                final isCurrentLine = index == _currentLineIndex;
+                    itemBuilder: (context, index) {
+                      final line = widget.prayer.lines[index];
+                      final isCurrentLine = _playbackService.currentPrayer?.id == widget.prayer.id &&
+                          index == _playbackService.currentLineIndex;
 
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
@@ -476,38 +433,40 @@ class _PrayerPlayerScreenState extends State<PrayerPlayerScreen> {
                 ),
               ],
             ),
-            child: SafeArea(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_isPlaying)
-                    IconButton(
-                      onPressed: _stopPrayer,
-                      icon: const Icon(Icons.stop),
-                      iconSize: 40,
-                      tooltip: 'Stop',
+              child: SafeArea(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_playbackService.isPlaying && _playbackService.currentPrayer?.id == widget.prayer.id)
+                      IconButton(
+                        onPressed: _stopPrayer,
+                        icon: const Icon(Icons.stop),
+                        iconSize: 40,
+                        tooltip: 'Stop',
+                      ),
+                    const SizedBox(width: 16),
+                    FloatingActionButton.large(
+                      onPressed: () {
+                        final isSamePrayer = _playbackService.currentPrayer?.id == widget.prayer.id;
+                        
+                        if (!_playbackService.isPlaying || !isSamePrayer) {
+                          _playPrayer();
+                        } else if (_playbackService.isPaused) {
+                          _resumePrayer();
+                        } else {
+                          _pausePrayer();
+                        }
+                      },
+                      child: Icon(
+                        !_playbackService.isPlaying || _playbackService.currentPrayer?.id != widget.prayer.id
+                            ? Icons.play_arrow
+                            : (_playbackService.isPaused ? Icons.play_arrow : Icons.pause),
+                        size: 40,
+                      ),
                     ),
-                  const SizedBox(width: 16),
-                  FloatingActionButton.large(
-                    onPressed: () {
-                      if (!_isPlaying) {
-                        _playPrayer();
-                      } else if (_isPaused) {
-                        _resumePrayer();
-                      } else {
-                        _pausePrayer();
-                      }
-                    },
-                    child: Icon(
-                      !_isPlaying
-                          ? Icons.play_arrow
-                          : (_isPaused ? Icons.play_arrow : Icons.pause),
-                      size: 40,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ),
         ],
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/prayer.dart';
 
 class TtsService {
@@ -7,13 +8,36 @@ class TtsService {
   bool _isPaused = false;
   bool _isStopped = false;
 
+  // Keys for SharedPreferences
+  static const String _keyVoiceName = 'tts_voice_name';
+  static const String _keyVoiceLocale = 'tts_voice_locale';
+  static const String _keySpeechRate = 'tts_speech_rate';
+  static const String _keyVolume = 'tts_volume';
+
   Future<void> initialize() async {
     if (_isInitialized) return;
 
+    // Load saved settings
+    final prefs = await SharedPreferences.getInstance();
+    final speechRate = prefs.getDouble(_keySpeechRate) ?? 0.35;
+    final volume = prefs.getDouble(_keyVolume) ?? 1.0;
+
     await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.35);
-    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setSpeechRate(speechRate);
+    await _flutterTts.setVolume(volume);
     await _flutterTts.setPitch(1.0);
+    await _flutterTts.awaitSpeakCompletion(true);
+
+    // Load saved voice if available
+    final voiceName = prefs.getString(_keyVoiceName);
+    final voiceLocale = prefs.getString(_keyVoiceLocale);
+    if (voiceName != null && voiceLocale != null) {
+      try {
+        await _flutterTts.setVoice({'name': voiceName, 'locale': voiceLocale});
+      } catch (e) {
+        // Voice not available, use default
+      }
+    }
 
     _flutterTts.setStartHandler(() {});
 
@@ -45,10 +69,16 @@ class TtsService {
 
   Future<void> setSpeechRate(double rate) async {
     await _flutterTts.setSpeechRate(rate);
+    // Save to preferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keySpeechRate, rate);
   }
 
   Future<void> setVolume(double volume) async {
     await _flutterTts.setVolume(volume);
+    // Save to preferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyVolume, volume);
   }
 
   Future<void> setPitch(double pitch) async {
@@ -61,6 +91,31 @@ class TtsService {
 
   Future<void> setVoice(Map<String, String> voice) async {
     await _flutterTts.setVoice(voice);
+    // Save to preferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyVoiceName, voice['name'] ?? '');
+    await prefs.setString(_keyVoiceLocale, voice['locale'] ?? '');
+  }
+
+  Future<Map<String, String>?> getSavedVoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    final voiceName = prefs.getString(_keyVoiceName);
+    final voiceLocale = prefs.getString(_keyVoiceLocale);
+    
+    if (voiceName != null && voiceLocale != null) {
+      return {'name': voiceName, 'locale': voiceLocale};
+    }
+    return null;
+  }
+
+  Future<double> getSavedSpeechRate() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_keySpeechRate) ?? 0.35;
+  }
+
+  Future<double> getSavedVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_keyVolume) ?? 1.0;
   }
 
   Future<void> playPrayerWithCallAndResponse({
@@ -93,8 +148,6 @@ class TtsService {
       onLineStart(i, line);
 
       await _flutterTts.speak(line.text);
-
-      await Future.delayed(Duration(seconds: 1));
 
       int pauseSeconds = line.pauseDurationSeconds;
       for (int j = 0; j < pauseSeconds; j++) {

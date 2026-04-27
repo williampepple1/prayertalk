@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'screens/prayer_list_screen.dart';
+import 'services/prayer_playback_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await PrayerPlaybackService().initialize();
   runApp(const PrayerTalkApp());
 }
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/prayer.dart';
 import '../data/prayer_data.dart';
+import '../widgets/mini_player.dart';
+import '../services/prayer_playback_service.dart';
 import 'prayer_player_screen.dart';
+import 'settings_screen.dart';
 
 class PrayerListScreen extends StatefulWidget {
   const PrayerListScreen({super.key});
@@ -13,6 +16,7 @@ class PrayerListScreen extends StatefulWidget {
 class _PrayerListScreenState extends State<PrayerListScreen> {
   final List<Prayer> _prayers = PrayerData.getPrayers();
   String _selectedCategory = 'All';
+  final _playbackService = PrayerPlaybackService();
 
   List<String> get _categories {
     final categories = _prayers.map((p) => p.category).toSet().toList();
@@ -34,6 +38,20 @@ class _PrayerListScreenState extends State<PrayerListScreen> {
         title: const Text('Prayer Talk'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         elevation: 2,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -163,25 +181,21 @@ class _PrayerListScreenState extends State<PrayerListScreen> {
                     },
                   ),
           ),
+          MiniPlayer(
+            onTap: () {
+              if (_playbackService.currentPrayer != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PrayerPlayerScreen(
+                      prayer: _playbackService.currentPrayer!,
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          showAboutDialog(
-            context: context,
-            applicationName: 'Prayer Talk',
-            applicationVersion: '1.0.0',
-            applicationIcon: const Icon(Icons.auto_stories, size: 48),
-            children: [
-              const Text(
-                'A Bible Prayer app with call-and-response text-to-speech functionality. '
-                'Pray while doing other things!',
-              ),
-            ],
-          );
-        },
-        icon: const Icon(Icons.info_outline),
-        label: const Text('About'),
       ),
     );
   }
