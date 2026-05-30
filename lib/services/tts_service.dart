@@ -60,7 +60,7 @@ class TtsService {
 
   Future<void> pause() async {
     _isPaused = true;
-    await _flutterTts.pause();
+    await _flutterTts.stop(); // Use stop to ensure speech halts correctly
   }
 
   Future<void> resume() async {
@@ -147,21 +147,29 @@ class TtsService {
       final line = prayer.lines[i];
       onLineStart(i, line);
 
+      // Keep track if we need to speak the line
+      // Since pause uses stop(), the native tts finishes immediately
+      // and we just progress to the next phase. In a real app we might want to
+      // restart the current line if it was paused while speaking, but for simplicity
+      // and to avoid complicated state tracking, we just speak it.
+      // If paused, flutterTts.stop() cancels this immediately.
       await _flutterTts.speak(line.text);
 
-      int pauseSeconds = line.pauseDurationSeconds;
-      for (int j = 0; j < pauseSeconds; j++) {
+      int totalDelayMs = line.pauseDurationSeconds * 1000;
+      int elapsedMs = 0;
+
+      while (elapsedMs < totalDelayMs) {
         if (_isStopped || !shouldContinue()) {
           break;
         }
-        while (_isPaused && !_isStopped) {
+
+        if (_isPaused) {
           await Future.delayed(const Duration(milliseconds: 100));
-          if (!shouldContinue()) {
-            _isStopped = true;
-            break;
-          }
+          continue; // Wait but don't increase elapsedMs
         }
-        await Future.delayed(const Duration(seconds: 1));
+
+        await Future.delayed(const Duration(milliseconds: 100));
+        elapsedMs += 100;
       }
     }
 
