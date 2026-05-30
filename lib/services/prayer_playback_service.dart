@@ -68,11 +68,6 @@ class PrayerPlaybackService extends ChangeNotifier {
     _isPaused = false;
     await _ttsService.resume();
     notifyListeners();
-    
-    // Continue from current position
-    if (_currentPrayer != null) {
-      await playPrayer(_currentPrayer!);
-    }
   }
 
   Future<void> stop() async {
